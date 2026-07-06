@@ -1,0 +1,27 @@
+version: '3.1'
+services:
+  webdb:
+    image: postgres:15
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_PASSWORD=odoo
+      - POSTGRES_USER=odoo
+    volumes:
+      - odoo-db-data:/var/lib/postgresql/data
+
+  odoo_wms:
+    image: odoo:17.0
+    depends_on:
+      - webdb
+    ports:
+      - "8069:8069"
+    environment:
+      - HOST=webdb
+      - USER=odoo
+      - PASSWORD=odoo
+    volumes:
+      - odoo-web-data:/var/lib/odoo
+
+volumes:
+  odoo-db-data:
+  odoo-web-data:

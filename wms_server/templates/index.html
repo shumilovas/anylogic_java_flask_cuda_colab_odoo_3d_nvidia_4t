@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Панель управления WMS</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0f172a; color: #f8fafc; text-align: center; padding: 50px; }
+        .wms-card { background: #1e293b; padding: 40px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); display: inline-block; border: 1px solid #334155; }
+        .counter { font-size: 72px; color: #38bdf8; font-weight: bold; margin: 20px 0; text-shadow: 0 0 20px rgba(56, 189, 248, 0.4); }
+        h1 { color: #f1f5f9; margin-bottom: 5px; }
+        .status { color: #4ade80; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="wms-card">
+        <h1>СИСТЕМА УПРАВЛЕНИЯ СКЛАДОМ (WMS)</h1>
+        <p style="color: #94a3b8;">Мониторинг зоны выгрузки в реальном времени</p>
+        
+        <!-- Сюда наш скрипт будет подставлять живую цифру из AnyLogic -->
+        <div class="counter" id="box-counter">0</div>
+        
+        <p>Связь с моделью AnyLogic: <span class="status">СТАБИЛЬНАЯ</span></p>
+    </div>
+
+    <script>
+        // Функция, которая стучится к Python за свежими цифрами
+        async function refreshWmsData() {
+            try {
+                let response = await fetch('http://localhost:5000/api/wms/get_stats');
+                let data = await response.json();
+                
+                // Меняем нолик на экране на актуальное число коробок
+                document.getElementById('box-counter').innerText = data.total_boxes;
+            } catch (error) {
+                console.error("Ошибка получения данных от WMS-сервера:", error);
+            }
+        }
+
+        // Заставляем браузер запрашивать данные каждую секунду
+        setInterval(refreshWmsData, 1000);
+    </script>
+</body>
+</html>

@@ -747,32 +747,46 @@ agent.targetConveyor = getTargetConveyor(agent);]]></Code>
 						<Parameter>
 							<Name><![CDATA[onEnter]]></Name>
 							<Value Class="CodeValue">
-								<Code><![CDATA[try {
-    // Стучимся на Flask с передовой линии склада!
-    java.net.URL url = new java.net.URL("http://192.168.0.24:5000/api/wms/update_counters");
-    java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
-    conn.setRequestMethod("POST");
-    conn.setRequestProperty("Content-Type", "application/json; utf-8");
-    conn.setDoOutput(true);
-    conn.setConnectTimeout(5000); // 5 секунд на удержание связи
-    conn.setReadTimeout(5000);
+								<Code><![CDATA[new Thread(() -> {
+    try {
+        // Стучимся на объединенный Flask-шлюз
+        java.net.URL url = new java.net.URL("http://192.168.0.24:5000/api/wms/update_counters");
+        java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+        conn.setRequestMethod("POST");
+        conn.setRequestProperty("Content-Type", "application/json; utf-8");
+        conn.setDoOutput(true);
+        conn.setConnectTimeout(5000); 
+        conn.setReadTimeout(5000);
 
-    // Берем ID коробки прямо на старте
-    String boxId = String.valueOf(agent.getId());
-    String jsonPayload = "{\"red_qty\":1,\"blue_qty\":0,\"green_qty\":0,\"agent_id\":\"" + boxId + "\"}";
+        // Получаем уникальный цифровой паспорт коробки
+        String boxId = String.valueOf(agent.getId());
+        
+        // Имитируем, что каждая 10-я коробка со стулом (E-COM12) заходит помятой
+        String status = (agent.getId() % 10 == 0) ? "damaged" : "normal";
+        String event = (agent.getId() % 10 == 0) ? "box_damaged" : "box_moving";
 
-    try (java.io.OutputStream os = conn.getOutputStream()) {
-        byte[] input = jsonPayload.getBytes("utf-8");
-        os.write(input, 0, input.length);
+        // Формируем чистый расширенный контракт данных WMS + 3D
+        String jsonPayload = "{"
+            + "\"event\":\"" + event + "\","
+            + "\"sku\":\"E-COM12\","
+            + "\"agent_id\":\"STUL-" + boxId + "\","
+            + "\"status\":\"" + status + "\","
+            + "\"red_qty\":1,\"blue_qty\":0,\"green_qty\":0"
+            + "}";
+
+        try (java.io.OutputStream os = conn.getOutputStream()) {
+            byte[] input = jsonPayload.getBytes("utf-8");
+            os.write(input, 0, input.length);
+        }
+
+        int code = conn.getResponseCode();
+        conn.disconnect();
+
+    } catch (java.lang.Exception e) {
+        java.lang.System.err.println("[WMS START LINE ERROR] Сбой асинхронного триггера брака!");
+        e.printStackTrace();
     }
-
-    int code = conn.getResponseCode();
-    conn.disconnect();
-
-} catch (java.lang.Exception e) {
-    java.lang.System.err.println("[WMS START LINE ERROR] Сбой на первом конвейере!");
-    e.printStackTrace(); 
-}
+}).start();
 ]]></Code>
 							</Value>
 						</Parameter>

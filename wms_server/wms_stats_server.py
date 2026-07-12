@@ -18,7 +18,7 @@ ODOO_USER = 'odoo'      # ПОЛЬЗОВАТЕЛЬ ИЗ MANIFESTA (POSTGRES_USER
 ODOO_PASS = 'odoo'      # ПАРОЛЬ ИЗ MANIFESTA (POSTGRES_PASSWORD)
 
 # --- 2. ЖИВАЯ ССЫЛКА НА GOOGLE COLAB ---
-COLAB_CUDA_URL = "major-regions-burn.loca.lt"
+COLAB_CUDA_URL = "https://dry-adults-punch.loca.lt/api/cuda/simulate"
 
 # Хранилище для последних обсчитанных координат
 latest_cuda_positions = []

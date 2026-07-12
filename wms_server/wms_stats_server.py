@@ -18,7 +18,7 @@ ODOO_USER = 'odoo'      # ПОЛЬЗОВАТЕЛЬ ИЗ MANIFESTA (POSTGRES_USER
 ODOO_PASS = 'odoo'      # ПАРОЛЬ ИЗ MANIFESTA (POSTGRES_PASSWORD)
 
 # --- 2. ЖИВАЯ ССЫЛКА НА GOOGLE COLAB ---
-COLAB_CUDA_URL = "https://dry-adults-punch.loca.lt/api/cuda/simulate"
+COLAB_CUDA_URL = "https://dry-adults-punch.loca.lt"
 
 # Хранилище для последних обсчитанных координат
 latest_cuda_positions = []
@@ -70,40 +70,48 @@ def update_counters():
             "action_required": "TRIGGER_3D_RED_ALERT"
         }
         
+                # === ОБНОВЛЕННЫЙ БЛОК ИНВЕНТАРИЗАЦИОННОГО СПИСАНИЯ ДЛЯ ODOO 17 ===
         try:
-            # Подключаемся к Odoo 17 в Docker (порт 8069)
+            # Авторизуемся в контейнере Odoo
             common = xmlrpc.client.ServerProxy(f'{ODOO_URL}/xmlrpc/2/common', allow_none=True)
-            
-            # ЖЁСТКО передаем имя базы 'postgres', пользователя 'odoo' и пароль 'odoo'
-            uid = common.authenticate(ODOO_DB, 'odoo', 'odoo', {})
+            uid = common.authenticate(ODOO_DB, ODOO_USER, ODOO_PASS, {})
             
             if uid:
                 models = xmlrpc.client.ServerProxy(f'{ODOO_URL}/xmlrpc/2/object', allow_none=True)
                 
-                # ЖЁСТКО прописываем 'postgres' первым аргументом в каждый execute_kw вызов!
-                product_ids = models.execute_kw(ODOO_DB, uid, 'odoo', 'product.product', 'search', [[['default_code', '=', sku]]])
-
+                # 1. Ищем ID нашего стула по внутренней ссылке E-COM12
+                product_ids = models.execute_kw(ODOO_DB, uid, ODOO_PASS, 'product.product', 'search', [[['default_code', '=', sku]]])
+                
                 if product_ids:
-                    product_id = product_ids[0] if isinstance(product_ids, list) else product_ids
-                    location_ids = models.execute_kw(ODOO_DB, uid, 'odoo', 'stock.location', 'search', [[['usage', '=', 'internal']]])
-
-                    if location_ids:
-                        loc_id = location_ids[0] if isinstance(location_ids, list) else location_ids
-                        quant_ids = models.execute_kw(ODOO_DB, uid, 'odoo', 'stock.quant', 'search', [[['product_id', '=', product_id], ['location_id', '=', loc_id]]])
-
-                        if quant_ids:
-                            print(f"[ODOO 17 SUCCESS] Складской квант для {sku} успешно скорректирован!")
-                        else:
-                            print(f"[WMS INFO] Товар {sku} найден, но складские кванты еще не инициализированы.")
+                    product_id = product_ids[0]
+                    
+                    # 2. Ищем живой квант этого товара на основном складе
+                    quant_ids = models.execute_kw(ODOO_DB, uid, ODOO_PASS, 'stock.quant', 'search', [[['product_id', '=', product_id], ['location_id.usage', '=', 'internal']]])
+                    
+                    if quant_ids:
+                        quant_id = quant_ids[0]
+                        
+                        # Читаем ТЕКУЩЕЕ реальное количество из базы PostgreSQL
+                        quant_data = models.execute_kw(ODOO_DB, uid, ODOO_PASS, 'stock.quant', 'read', [quant_id], {'fields': ['quantity']})
+                        current_qty = quant_data[0]['quantity'] if quant_data else 100.0
+                        new_qty = max(current_qty - 1.0, 0.0) # Вычитаем 1 битый стул
+                        
+                        # ЖЕСТКИЙ АЛГОРИТМ ODOO 17: Пишем дельту в инвентаризационное поле
+                        models.execute_kw(ODOO_DB, uid, ODOO_PASS, 'stock.quant', 'write', [[quant_id], {
+                            'inventory_quantity': new_qty
+                        }])
+                        
+                        # ФИНАЛЬНЫЙ ТРИГГЕР: Вызываем метод применения изменений для мгновенного таяния баланса!
+                        models.execute_kw(ODOO_DB, uid, ODOO_PASS, 'stock.quant', 'action_apply_inventory', [[quant_id]])
+                        
+                        print(f"[ODOO 17 SUCCESS] Складской квант для {sku} успешно скорректирован! Текущий баланс: {new_qty}")
                     else:
-                        print("[WMS WARNING] Внутренний склад (internal) не найден в Odoo.")
+                        print(f"[WMS INFO] Товар {sku} найден, но складские кванты еще не инициализированы.")
                 else:
                     print(f"[WMS WARNING] Артикул {sku} отсутствует в номенклатуре Odoo.")
             else:
-                print("❌ Ошибка авторизации в Odoo! Проверьте, создана ли база данных 'postgres'.")
-                
+                print("❌ Ошибка авторизации в Odoo! Проверьте параметры подключения.")
         except Exception as odoo_err:
-            # Если база Odoo упала или выдает KeyError - Flask НЕ упадет, а просто залогирует это
             print(f"❌ Ошибка отправки транзакции в Odoo WMS: {odoo_err}")
 
     # === СЦЕНАРИЙ Б: ОБЫЧНОЕ ДВИЖЕНИЕ КОРОБОК (Выполняется, если это НЕ брак) ===
